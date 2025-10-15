@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide-react@0.294.0/dist/lucide-react.js"></script>
+    <style>
+        /* Custom styles for animations and specific elements */
+        body {
+            font-family: sans-serif;
+        }
+        .hidden {
+            display: none;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        /* Framer Motion-like transitions */
+        .motion-div {
+            overflow: hidden;
+            transition: height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="flex">
+        <aside class="w-64 bg-white shadow-md p-6 flex flex-col justify-between h-screen">
+            <div>
+                <div class="mb-8 flex items-center gap-2">
+                    <img src="../static/logo.png" width="200" height="100" alt="Logo" />
+                </div>
+                <nav class="space-y-2">
+                    <button class="flex items-center gap-3 px-4 py-3 w-full text-base font-medium rounded-md transition-colors bg-gray-100 text-gray-900">
+                        <svg class="lucide-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M10 3H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zM20 3h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zM10 13H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1zM20 13h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1z"/></svg>
+                        Modelos
+                    </button>
+                </nav>
+            </div>
+            <div class="space-y-3">
+                <button onclick="alert('Página de configurações em desenvolvimento!')" class="flex items-center gap-3 text-base text-gray-800 hover:text-gray-900 w-full">
+                     <svg class="lucide-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.82l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.82l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Configurações
+                </button>
+                <button class="flex items-center gap-3 text-base text-red-500 hover:text-red-700 w-full">
+                    <svg class="lucide-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                    Sair
+                </button>
+            </div>
+        </aside>
+
+        <main id="main-content" class="p-10 overflow-auto h-screen w-full">
+            </main>
+    </div>
+
+    <input type="file" id="excel-file-input" accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
+    <input type="file" id="logo-file-input" accept="image/png, image/jpeg, image/gif" class="hidden">
+
+<script>
+    // --- STATE MANAGEMENT ---
+    // A global state object to mimic React's state
+    const AppState = {
+        currentView: 'modelos', // 'modelos' or 'visualizacao'
+        selectedModelo: null,
+        isProcessingFile: false,
+        isLoading: false,
+        isPreviewLoading: false,
+        error: "",
+        excelFile: null,
+        logoFile: null,
+        valoresExcel: {},
+        previewImages: [],
+        customSlides: [],
+        keptSlides: Array.from({ length: 30 }, (_, i) => i + 1), // Slides 1 to 30
+        selectedFields: [
+            "NOME_CLIENTE", "CONS_ENERGIA_MEDIO", "VOL_PROJ", "OBJ", "PRAZO_CONT", "DESC_1ANO",
+            "MODELO_NEGOCIO", "FLUXO1", "FLUXO2", "TAXA_MEDIA", "PIS", "ICMS", "PONTA", "FORA_PONTA",
+        ],
+        // Modal states
+        isCamposModalOpen: false,
+        isValoresModalOpen: false,
+        isManualModalOpen: false,
+        isPreviewModalOpen: false,
+        isSlidesModalOpen: false,
+    };
+
+    // --- RENDER FUNCTIONS ---
+    // These functions generate the HTML for each "component"
+
+    function render() {
+        const mainContent = document.getElementById('main-content');
+        if (AppState.currentView === 'modelos') {
+            mainContent.innerHTML = renderModelosPage();
+        } else if (AppState.currentView === 'visualizacao') {
+            mainContent.innerHTML = renderVisualizacaoProposta();
+        }
+
+        // Render modals if they are open
+        if (AppState.isCamposModalOpen) mainContent.insertAdjacentHTML('beforeend', renderCamposModal());
+        if (AppState.isValoresModalOpen) mainContent.insertAdjacentHTML('beforeend', renderValoresModal());
+        if (AppState.isManualModalOpen) mainContent.insertAdjacentHTML('beforeend', renderManualValuesModal());
+        if (AppState.isPreviewModalOpen) mainContent.insertAdjacentHTML('beforeend', renderPreviewModal());
+        if (AppState.isSlidesModalOpen) mainContent.insertAdjacentHTML('beforeend', renderSlidesModal());
+    }
+
+    function renderModelosPage() {
+        return `
+            <div class="flex justify-between items-center mb-10">
+                <input type="text" placeholder="Pesquisar" class="w-1/3 text-gray-800 px-4 py-2 border rounded-md focus:outline-none focus:ring">
+            </div>
+            <h1 class="text-xl text-gray-800 font-semibold mb-6">Modelos de propostas</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div onclick="handleSelectModelo({ id: 1, nome: 'Modelo 1', categoria: 'Categoria Proposta' })"
+                    class="border hover:scale-105 transition rounded-md shadow-sm bg-white cursor-pointer hover:shadow-md">
+                    <div class="p-4">
+                        <img src="../static/ModelPreview.png" alt="Modelo 1" class="rounded mb-4 border" />
+                        <h2 class="font-semibold text-gray-800 mb-1">Modelo 1</h2>
+                        <p class="text-sm text-gray-700">Categoria Proposta</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderVisualizacaoProposta() {
+        const hasDataToEdit = Object.keys(AppState.valoresExcel).length > 0;
+        
+        return `
+            <div class="p-6 bg-white rounded-lg shadow">
+                <div class="flex justify-between items-center mb-6">
+                    <button onclick="handleVoltar()" class="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900">
+                        <svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 12H5m7 7l-7-7 7-7"/></svg> Voltar
+                    </button>
+                    <div class="flex items-center gap-3">
+                        <button onclick="document.getElementById('excel-file-input').click()" class="flex items-center gap-2 text-sm px-3 py-1 border rounded-md text-gray-600 hover:bg-gray-50">
+                            <svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/><path d="M2 10h20m-10 5v5m-3-3l3 3 3-3"/></svg> Selecionar Planilha
+                        </button>
+                        <button onclick="handlePreviewClick()" ${AppState.isPreviewLoading || AppState.isProcessingFile || !AppState.excelFile ? 'disabled' : ''} class="flex items-center gap-2 text-sm px-3 py-1 border rounded-md text-blue-600 border-blue-300 hover:bg-blue-50 disabled:bg-gray-200 disabled:cursor-not-allowed">
+                            ${AppState.isPreviewLoading ? '<svg class="lucide-icon w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Gerando...' : '<svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> Pré-visualizar'}
+                        </button>
+                        <button onclick="handleGerarPropostaClick()" ${AppState.isLoading || AppState.isProcessingFile || !AppState.excelFile ? 'disabled' : ''} class="flex items-center gap-2 text-sm px-3 py-1 border rounded-md text-green-600 border-green-300 hover:bg-green-50 disabled:bg-gray-200 disabled:cursor-not-allowed">
+                           ${AppState.isLoading ? '<svg class="lucide-icon w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Gerando...' : '<svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg> Gerar Proposta'}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="my-4 p-4 border rounded-md bg-gray-50 min-h-[80px]">
+                    ${renderStatusPanelContent()}
+                </div>
+
+                <div class="mt-4 border rounded-md overflow-hidden">
+                    <button onclick="toggleMenu()" class="flex justify-between items-center text-gray-700 w-full px-4 py-3 text-sm font-semibold bg-white hover:bg-gray-50">
+                        <span class="flex items-center gap-2">
+                            <svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Opções de Edição
+                        </span>
+                        <span id="menu-arrow">▼</span>
+                    </button>
+                    <div id="menu-content" class="motion-div bg-gray-50 border-t" style="height: 0; opacity: 0;">
+                        <button onclick="openModal('isCamposModalOpen')" class="text-sm w-full px-4 py-3 hover:bg-gray-100 text-gray-600 flex items-center gap-2 text-left">
+                           <svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Alterar Campos de Dados
+                        </button>
+                        <button onclick="document.getElementById('logo-file-input').click()" class="text-sm w-full px-4 py-3 hover:bg-gray-100 text-gray-600 flex items-center gap-2 text-left border-t">
+                            <svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> Adicionar Logo do Cliente
+                        </button>
+                        <button onclick="openModal('isSlidesModalOpen')" class="text-sm w-full px-4 py-3 hover:bg-gray-100 text-gray-600 flex items-center gap-2 text-left border-t">
+                            <svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg> Remover Slides
+                        </button>
+                        <button onclick="openModal('isValoresModalOpen')" ${!hasDataToEdit || AppState.isProcessingFile ? 'disabled' : ''} class="text-sm w-full px-4 py-3 hover:bg-gray-100 text-gray-600 flex items-center gap-2 text-left border-t disabled:text-gray-400 disabled:cursor-not-allowed">
+                            <svg class="lucide-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Alterar Valores da Planilha
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderStatusPanelContent() {
+        const hasDataToEdit = Object.keys(AppState.valoresExcel).length > 0;
+        let content = '';
+        if (AppState.isProcessingFile) {
+            content = `
+                <div class="flex items-center gap-2 text-sm text-blue-700">
+                    <svg class="lucide-icon w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    <span>Lendo dados da planilha: <strong>${AppState.excelFile?.name}</strong></span>
+                </div>`;
+        } else if (AppState.excelFile && hasDataToEdit) {
+            content = `
+                <div class="flex items-center gap-2 text-sm text-green-700">
+                    <svg class="lucide-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+                    <span>Dados da planilha <strong>${AppState.excelFile.name}</strong> carregados com sucesso.</span>
+                </div>`;
+        } else {
+            content = `<p class="text-sm text-gray-600">Por favor, selecione um arquivo Excel para começar.</p>`;
+        }
+
+        if (AppState.logoFile) {
+            content += `
+                <div class="mt-2 flex items-center gap-2 text-sm text-blue-700">
+                    <svg class="lucide-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                    <span>Logo <strong>${AppState.logoFile.name}</strong> selecionado.</span>
+                </div>`;
+        }
+        
+        if (AppState.customSlides.length > 0) {
+             content += `
+                <div class="mt-2 flex items-center gap-2 text-sm text-purple-700">
+                   <svg class="lucide-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>
+                    <span><strong>${AppState.customSlides.length}</strong> slide(s) customizado(s) para adicionar.</span>
+                </div>`;
+        }
+
+        if (AppState.error) {
+            content += `
+                <div class="mt-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+                    <strong>Erro:</strong> ${AppState.error}
+                </div>`;
+        }
+        return content;
+    }
+
+    // --- MODAL RENDER FUNCTIONS ---
+    function renderCamposModal() {
+        const ALL_FIELDS = [
+            "NOME_CLIENTE", "CONS_ENERGIA_MEDIO", "VOL_PROJ", "OBJ", "PRAZO_CONT", "DESC_1ANO", "MODELO_NEGOCIO", "FLUXO", "TAXA_MEDIA", "PIS",
+            "ICMS", "PONTA", "FORA_PONTA"
+        ];
+        return `
+            <div id="campos-modal" class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
+              <div class="bg-white w-[500px] rounded-lg shadow-xl p-6 relative">
+                <button onclick="closeModal('isCamposModalOpen')" class="absolute top-4 right-4 text-gray-400 hover:text-red-500">
+                    <svg class="lucide-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">Alterar Campos Dinâmicos</h2>
+                <p class="text-sm text-gray-600 mb-6">Selecione os campos que devem ser preenchidos na proposta.</p>
+                <div id="campos-checkboxes" class="grid grid-cols-2 gap-4 max-h-64 overflow-y-auto pr-2">
+                  ${ALL_FIELDS.map(field => `
+                    <div class="flex items-center">
+                      <input type="checkbox" id="${field}" value="${field}" ${AppState.selectedFields.includes(field) ? 'checked' : ''} onchange="handleCheckboxChange(this)"
+                        class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                      <label for="${field}" class="ml-2 text-sm font-medium text-gray-700">${field.replace(/_/g, " ")}</label>
+                    </div>
+                  `).join('')}
+                </div>
+                <div class="flex justify-end gap-3 mt-8">
+                  <button onclick="closeModal('isCamposModalOpen')" class="px-4 py-2 text-sm border rounded-md text-gray-700 hover:bg-gray-50">Cancelar</button>
+                  <button onclick="handleSaveCampos()" class="px-4 py-2 text-sm border rounded-md text-white bg-blue-600 hover:bg-blue-700">Salvar</button>
+                </div>
+              </div>
+            </div>`;
+    }
+
+    function renderValoresModal() {
+        return `
+            <div id="valores-modal" class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
+              <div class="bg-white w-[500px] rounded-lg shadow-xl p-6 relative max-h-[80vh] overflow-y-auto">
+                <button onclick="closeModal('isValoresModalOpen')" class="absolute top-4 right-4 text-gray-900 hover:text-red-500">
+                    <svg class="lucide-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">Alterar Valores Manualmente</h2>
+                <div class="grid grid-cols-1 gap-4">
+                  ${Object.keys(AppState.valoresExcel).map(field => `
+                    <div class="flex flex-col">
+                      <label class="text-sm font-medium text-black">${field.replace(/_/g, " ")}</label>
+                      <input type="text" data-field="${field}" value="${AppState.valoresExcel[field] || ""}"
+                        class="mt-1 px-2 py-1 border rounded-md text-sm text-gray-900 valores-input">
+                    </div>
+                  `).join('')}
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                  <button onclick="closeModal('isValoresModalOpen')" class="px-4 py-2 text-sm border rounded-md text-gray-900 hover:bg-gray-50">Cancelar</button>
+                  <button onclick="handleSaveValores()" class="px-4 py-2 text-sm border rounded-md text-white bg-blue-600 hover:bg-blue-700">Salvar</button>
+                </div>
+              </div>
+            </div>`;
+    }
+    
+    function renderManualValuesModal() {
+        return `
+            <div id="manual-values-modal" class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
+                <div class="bg-white w-[600px] rounded-lg shadow-xl p-6 relative">
+                    <button onclick="closeModal('isManualModalOpen')" class="absolute top-4 right-4 text-black hover:text-red-500">
+                        <svg class="lucide-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                    <div class="border-b border-gray-200 mb-6">
+                        <nav id="manual-tabs" class="-mb-px flex space-x-4" aria-label="Tabs">
+                            <button onclick="switchManualTab('slide16')" class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg focus:outline-none whitespace-nowrap border-b-2 border-blue-600 text-blue-600">Equipamentos (S16)</button>
+                            <button onclick="switchManualTab('slide17')" class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg focus:outline-none whitespace-nowrap text-gray-500 hover:text-gray-700">Equipamentos CC (S17)</button>
+                            <button onclick="switchManualTab('slide18')" class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg focus:outline-none whitespace-nowrap text-gray-500 hover:text-gray-700">Cronograma (S18)</button>
+                        </nav>
+                    </div>
+
+                    <div id="manual-values-content" class="max-h-[60vh] overflow-y-auto pr-2">
+                        </div>
+
+                    <div class="flex justify-end gap-3 mt-8 pt-4 border-t">
+                        <button onclick="closeModal('isManualModalOpen')" class="px-4 py-2 text-sm border rounded-md text-gray-700 hover:bg-gray-50">Cancelar</button>
+                        <button onclick="handleSaveManualValues()" class="px-4 py-2 text-sm border rounded-md text-white bg-green-600 hover:bg-green-700">Continuar e Gerar Proposta</button>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    function renderPreviewModal() {
+        return `
+            <div id="preview-modal" class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+              <div class="bg-white w-full max-w-5xl h-full max-h-[90vh] rounded-lg shadow-xl p-4 relative flex flex-col">
+                <div class="flex justify-between items-center mb-4 pb-2 border-b">
+                  <h2 class="text-lg font-semibold text-gray-800">Pré-visualização da Proposta</h2>
+                  <span id="slide-counter" class="text-sm font-medium text-gray-600"></span>
+                  <button onclick="closeModal('isPreviewModalOpen')" class="text-gray-500 hover:text-red-500">
+                     <svg class="lucide-icon w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <div class="flex-grow flex items-center justify-center relative bg-gray-100 rounded">
+                  <img id="preview-image" src="" alt="Slide Preview" class="max-w-full max-h-full object-contain" />
+                  <button id="prev-slide-btn" onclick="navigatePreview(-1)" class="absolute left-4 top-1/2 -translate-y-1/2 bg-black/40 text-white rounded-full p-2 hover:bg-black/60 disabled:opacity-30 disabled:cursor-not-allowed">
+                     <svg class="lucide-icon w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="15 18 -9 12 15 6"/></svg>
+                  </button>
+                  <button id="next-slide-btn" onclick="navigatePreview(1)" class="absolute right-4 top-1/2 -translate-y-1/2 bg-black/40 text-white rounded-full p-2 hover:bg-black/60 disabled:opacity-30 disabled:cursor-not-allowed">
+                     <svg class="lucide-icon w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>`;
+    }
+
+    function renderSlidesModal() {
+        const TOTAL_SLIDES = 30;
+        let slidesHtml = '';
+        for (let i = 1; i <= TOTAL_SLIDES; i++) {
+            const isSelected = AppState.keptSlides.includes(i);
+            slidesHtml += `
+                <div onclick="handleToggleSlide(${i})" class="slide-item relative border-2 rounded-md cursor-pointer transition-all duration-200 ${isSelected ? 'border-blue-500 scale-105' : 'border-transparent opacity-60 hover:opacity-100'}" data-slide-number="${i}">
+                    <img src="/slides/slide_${i}.jpg" alt="Slide ${i}" class="w-full h-auto rounded">
+                    <div class="absolute top-2 right-2 bg-white/80 rounded p-1">
+                        ${isSelected ? '<svg class="lucide-icon w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>' : '<svg class="lucide-icon w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>'}
+                    </div>
+                    <div class="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-center text-xs py-1 rounded-b-sm">Slide ${i}</div>
+                </div>`;
+        }
+        return `
+            <div id="slides-modal" class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+              <div class="bg-white w-full max-w-4xl h-full max-h-[90vh] rounded-lg shadow-xl p-6 flex flex-col">
+                <div class="flex justify-between items-center mb-4 pb-4 border-b">
+                  <h2 class="text-xl font-semibold text-gray-800">Selecionar Slides a Manter</h2>
+                  <button onclick="closeModal('isSlidesModalOpen')" class="text-gray-500 hover:text-red-500">
+                    <svg class="lucide-icon w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <p class="text-sm text-gray-600 mb-6">Clique nos slides que você deseja <strong>manter</strong>. Slides não selecionados serão removidos.</p>
+                <div class="flex-grow grid grid-cols-4 md:grid-cols-5 gap-4 overflow-y-auto pr-2">${slidesHtml}</div>
+                <div class="flex justify-end gap-3 mt-8 pt-4 border-t">
+                  <button onclick="closeModal('isSlidesModalOpen')" class="px-4 py-2 text-sm border rounded-md text-gray-700 hover:bg-gray-50">Cancelar</button>
+                  <button onclick="handleSaveSlides()" class="px-4 py-2 text-sm border rounded-md text-white bg-blue-600 hover:bg-blue-700">Salvar Alterações</button>
+                </div>
+              </div>
+            </div>`;
+    }
+
+    // --- EVENT HANDLERS & LOGIC ---
+    function handleSelectModelo(modelo) {
+        AppState.selectedModelo = modelo;
+        AppState.currentView = 'visualizacao';
+        render();
+    }
+
+    function handleVoltar() {
+        // Reset state for the visualization page
+        Object.assign(AppState, {
+            currentView: 'modelos',
+            selectedModelo: null,
+            isProcessingFile: false,
+            isLoading: false,
+            isPreviewLoading: false,
+            error: "",
+            excelFile: null,
+            logoFile: null,
+            valoresExcel: {},
+            previewImages: [],
+        });
+        render();
+    }
+    
+    function toggleMenu() {
+        const menu = document.getElementById('menu-content');
+        const arrow = document.getElementById('menu-arrow');
+        const isOpen = menu.style.height !== '0px';
+        if (isOpen) {
+            menu.style.height = '0px';
+            menu.style.opacity = '0';
+            arrow.textContent = '▼';
+        } else {
+            menu.style.height = menu.scrollHeight + 'px';
+            menu.style.opacity = '1';
+            arrow.textContent = '▲';
+        }
+    }
+
+    async function handleFileChange(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        AppState.excelFile = file;
+        AppState.error = "";
+        AppState.isProcessingFile = true;
+        AppState.valoresExcel = {};
+        AppState.previewImages = [];
+        render(); // Update UI to show loading state
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const response = await fetch("http://localhost:5000/extract", {
+                method: "POST",
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Falha ao extrair dados da planilha.");
+            }
+            AppState.valoresExcel = data;
+        } catch (err) {
+            AppState.error = err.message;
+            AppState.excelFile = null;
+        } finally {
+            AppState.isProcessingFile = false;
+            render(); // Re-render with new data or error
+        }
+    }
+    
+    function handleLogoChange(event) {
+        const file = event.target.files[0];
+        if (file) {
+            AppState.logoFile = file;
+            render();
+        }
+    }
+
+    function handleGerarPropostaClick() {
+        if (!AppState.excelFile) {
+            AppState.error = "Por favor, selecione um arquivo Excel primeiro.";
+            render();
+            return;
+        }
+        AppState.error = "";
+        openModal('isManualModalOpen');
+    }
+    
+    async function handleGenerateWithManualValues(manualData) {
+        if (!AppState.excelFile) return;
+        AppState.isLoading = true;
+        render();
+
+        const formData = buildFormData(manualData);
+        
+        try {
+            const response = await fetch("http://localhost:5000/generate", {
+                method: "POST",
+                body: formData,
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Falha ao gerar a proposta.");
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${AppState.selectedModelo.nome.replace(" ", "_")}_customizada.pptx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            AppState.error = err.message;
+        } finally {
+            AppState.isLoading = false;
+            render();
+        }
+    }
+    
+    async function handlePreviewClick() {
+        if (!AppState.excelFile) {
+            AppState.error = "Por favor, selecione um arquivo Excel para pré-visualizar.";
+            render();
+            return;
+        }
+        AppState.error = "";
+        AppState.isPreviewLoading = true;
+        render();
+
+        const formData = buildFormData({}); // No manual data for preview
+
+        try {
+            const response = await fetch("http://localhost:5000/preview", {
+                method: "POST",
+                body: formData,
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Falha ao gerar a pré-visualização.");
+            }
+            const data = await response.json();
+            AppState.previewImages = data.slides || [];
+            openModal('isPreviewModalOpen');
+        } catch (err) {
+            AppState.error = err.message;
+        } finally {
+            AppState.isPreviewLoading = false;
+            render();
+        }
+    }
+    
+    function buildFormData(manualData) {
+        const formData = new FormData();
+        formData.append("file", AppState.excelFile);
+        if (AppState.logoFile) {
+            formData.append("logo", AppState.logoFile);
+        }
+        if (AppState.customSlides.length > 0) {
+            formData.append('custom_slides', JSON.stringify(AppState.customSlides));
+        }
+        AppState.selectedFields.forEach(field => formData.append("campos", field));
+        Object.keys(AppState.valoresExcel).forEach(field => {
+            formData.append(field, AppState.valoresExcel[field]);
+        });
+        Object.keys(manualData).forEach(field => {
+            formData.append(field, manualData[field]);
+        });
+        AppState.keptSlides.forEach(slideNum => formData.append("slides_a_manter", slideNum));
+        return formData;
+    }
+
+    // --- Modal Logic ---
+    function openModal(modalName) {
+        AppState[modalName] = true;
+        render();
+        // Special handling for modals that need post-render setup
+        if (modalName === 'isPreviewModalOpen') {
+            setupPreviewModal();
+        }
+        if (modalName === 'isManualModalOpen') {
+            switchManualTab('slide16'); // Initialize first tab
+        }
+    }
+
+    function closeModal(modalName) {
+        AppState[modalName] = false;
+        render();
+    }
+    
+    // Campos Modal
+    function handleCheckboxChange(checkbox) {
+        const { value, checked } = checkbox;
+        if (checked) {
+            if (!AppState.selectedFields.includes(value)) {
+                AppState.selectedFields.push(value);
+            }
+        } else {
+            AppState.selectedFields = AppState.selectedFields.filter(f => f !== value);
+        }
+    }
+
+    function handleSaveCampos() {
+        // The state is already updated by handleCheckboxChange
+        closeModal('isCamposModalOpen');
+    }
+
+    // Valores Modal
+    function handleSaveValores() {
+        const inputs = document.querySelectorAll('#valores-modal .valores-input');
+        const novosValores = {};
+        inputs.forEach(input => {
+            novosValores[input.dataset.field] = input.value;
+        });
+        AppState.valoresExcel = novosValores;
+        closeModal('isValoresModalOpen');
+    }
+
+    // Preview Modal
+    let currentSlideIndex = 0;
+    function setupPreviewModal() {
+        currentSlideIndex = 0;
+        updatePreviewSlide();
+    }
+    function navigatePreview(direction) {
+        const newIndex = currentSlideIndex + direction;
+        if (newIndex >= 0 && newIndex < AppState.previewImages.length) {
+            currentSlideIndex = newIndex;
+            updatePreviewSlide();
+        }
+    }
+    function updatePreviewSlide() {
+        document.getElementById('preview-image').src = `data:image/png;base64,${AppState.previewImages[currentSlideIndex]}`;
+        document.getElementById('slide-counter').textContent = `Slide ${currentSlideIndex + 1} de ${AppState.previewImages.length}`;
+        document.getElementById('prev-slide-btn').disabled = currentSlideIndex === 0;
+        document.getElementById('next-slide-btn').disabled = currentSlideIndex === AppState.previewImages.length - 1;
+    }
+    
+    // Slides Modal
+    function handleToggleSlide(slideNumber) {
+        const index = AppState.keptSlides.indexOf(slideNumber);
+        if (index > -1) {
+            AppState.keptSlides.splice(index, 1);
+        } else {
+            AppState.keptSlides.push(slideNumber);
+            AppState.keptSlides.sort((a, b) => a - b);
+        }
+        // Re-render only the modal content for performance
+        const modal = document.getElementById('slides-modal');
+        if(modal) modal.outerHTML = renderSlidesModal();
+    }
+
+    function handleSaveSlides() {
+        closeModal('isSlidesModalOpen');
+    }
+
+    // Manual Values Modal
+    let manualValuesState = {}; // Local state for the modal
+    
+    function switchManualTab(tabName) {
+        const contentDiv = document.getElementById('manual-values-content');
+        const tabs = document.querySelectorAll('#manual-tabs .tab-button');
+        
+        tabs.forEach(tab => {
+            tab.classList.remove('border-blue-600', 'text-blue-600');
+            tab.classList.add('text-gray-500', 'hover:text-gray-700');
+        });
+        
+        const activeTab = document.querySelector(`#manual-tabs button[onclick="switchManualTab('${tabName}')"]`);
+        activeTab.classList.add('border-blue-600', 'text-blue-600');
+        activeTab.classList.remove('text-gray-500', 'hover:text-gray-700');
+        
+        if (tabName === 'slide16') {
+            contentDiv.innerHTML = getSlide16Html();
+        } else if (tabName === 'slide17') {
+            contentDiv.innerHTML = getSlide17Html();
+        } else if (tabName === 'slide18') {
+            contentDiv.innerHTML = getSlide18Html();
+        }
+        
+        // Restore input values after switching tab
+        Object.keys(manualValuesState).forEach(key => {
+            const input = contentDiv.querySelector(`[data-key="${key}"]`);
+            if (input) input.value = manualValuesState[key] || '';
+        });
+    }
+
+    function updateManualValue(input) {
+        manualValuesState[input.dataset.key] = input.value;
+
+        // Auto-calculate sum for cronograma
+        if (['Manual1', 'Manual2', 'Manual3', 'Manual4'].includes(input.dataset.key)) {
+            const v1 = parseInt(manualValuesState.Manual1 || '0');
+            const v2 = parseInt(manualValuesState.Manual2 || '0');
+            const v3 = parseInt(manualValuesState.Manual3 || '0');
+            const v4 = parseInt(manualValuesState.Manual4 || '0');
+            const total = v1 + v2 + v3 + v4;
+            manualValuesState.SOMATOTALFINAL = total > 0 ? `${total} dias` : '';
+            const somaInput = document.getElementById('soma');
+            if(somaInput) somaInput.value = manualValuesState.SOMATOTALFINAL;
+        }
+    }
+    
+    function handleSaveManualValues() {
+        closeModal('isManualModalOpen');
+        handleGenerateWithManualValues(manualValuesState);
+        manualValuesState = {}; // Reset for next time
+    }
+
+    // HTML templates for Manual Values Modal Tabs
+    function getSlide16Html() {
+      return `
+        <h2 class="text-lg font-semibold text-black mb-1">Equipamentos do Projeto</h2>
+        <p class="text-sm text-gray-900 mb-6">Preencha os detalhes dos equipamentos que serão utilizados.</p>
+        <div class="space-y-4">
+          <fieldset class="border p-4 rounded-md">
+            <legend class="text-sm font-semibold text-black px-1">Módulos Fotovoltaicos</legend>
+            <div class="space-y-3 mt-2">
+              <div>
+                <label class="text-sm font-medium text-black">Fabricante</label>
+                <input type="text" data-key="FABRICANTEMODULO" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: Canadian Solar">
+              </div>
+              <div>
+                <label class="text-sm font-medium text-black">Modelo</label>
+                <input type="text" data-key="MODELOMODULO" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: CS3W-450MS">
+              </div>
+              <div>
+                <label class="text-sm font-medium text-black">Potência</label>
+                <input type="text" data-key="POTENCIAMODULO" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: 450W">
+              </div>
+            </div>
+          </fieldset>
+          </div>`;
+    }
+    function getSlide17Html() {
+        return `
+            <h2 class="text-lg font-semibold text-black mb-1">Equipamentos CC</h2>
+            <p class="text-sm text-gray-900 mb-6">Preencha os detalhes dos cabos e conectores.</p>
+            <div class="space-y-4">
+                <fieldset class="border p-4 rounded-md">
+                    <legend class="text-sm font-semibold text-black px-1">Cabo Solar</legend>
+                    <div class="space-y-3 mt-2">
+                        <div>
+                            <label class="text-sm font-medium text-black">Estrutura</label>
+                            <input type="text" data-key="EQUIPAMENTOSESTRUTURA" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: Cobre estanhado flexível">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-black">Vida útil</label>
+                            <input type="text" data-key="VIDAUTIL" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: 25 anos">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-black">Certificação</label>
+                            <input type="text" data-key="CERTIFICACAO" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: ABNT NBR 16612">
+                        </div>
+                    </div>
+                </fieldset>
+                </div>`;
+    }
+    function getSlide18Html() {
+        return `
+            <h2 class="text-lg font-semibold text-black mb-1">Cronograma do Projeto</h2>
+            <p class="text-sm text-gray-900 mb-6">Preencha os valores manuais em dias para cada etapa.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm font-medium text-black">Aprovação do Projeto</label>
+                    <input type="text" data-key="Manual1" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: 2 dias">
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-black">Aquisição de equipamento</label>
+                    <input type="text" data-key="Manual2" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: 20 dias">
+                </div>
+                 <div>
+                    <label class="text-sm font-medium text-black">Instalação</label>
+                    <input type="text" data-key="Manual3" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: 25 dias">
+                </div>
+                 <div>
+                    <label class="text-sm font-medium text-black">Testes e Comissionamento</label>
+                    <input type="text" data-key="Manual4" oninput="updateManualValue(this)" class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm" placeholder="Ex: 5 dias">
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-black">Entrega final</label>
+                    <input type="text" id="soma" data-key="SOMATOTALFINAL" readonly class="mt-1 w-full px-3 py-2 border rounded-md text-sm shadow-sm bg-gray-100 cursor-not-allowed" placeholder="Calculado automaticamente">
+                </div>
+            </div>`;
+    }
+
+    // --- INITIALIZATION ---
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('excel-file-input').addEventListener('change', handleFileChange);
+        document.getElementById('logo-file-input').addEventListener('change', handleLogoChange);
+        render(); // Initial render
+    });
+</script>
+</body>
+</html>
