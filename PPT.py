@@ -114,7 +114,7 @@ def substituir_logo(prs, logo_stream, placeholder):
             if not shape.has_text_frame:
                 continue
             if placeholder in shape.text_frame.text:
-                logo_stream.seek(0) 
+                logo_stream.seek(0)
                 left, top, width, height = shape.left, shape.top, shape.width, shape.height
                 sp = shape._sp
                 sp.getparent().remove(sp)
@@ -135,7 +135,7 @@ def substituir_tabela(slide, placeholder, table_data, campos_ativos):
             break
     if shape_to_replace:
         left, top, width, height = shape_to_replace.left, shape_to_replace.top, shape_to_replace.width, shape_to_replace.height
-        
+
         sp = shape_to_replace._sp
         sp.getparent().remove(sp)
 
@@ -161,67 +161,86 @@ def substituir_tabela(slide, placeholder, table_data, campos_ativos):
 
 
 def substituir_graficos(prs, excel_path, graficos_info):
+    """
+    Substitui placeholders de gráficos no PPT com imagens do Excel de forma robusta.
+    """
+    print("--- Iniciando substituição de gráficos ---")
+    excel = None
+    wb = None
+    
     try:
         pythoncom.CoInitialize()
         excel = win32.gencache.EnsureDispatch("Excel.Application")
         excel.Visible = False
         excel.DisplayAlerts = False
-        wb = excel.Workbooks.Open(excel_path)
 
+        print(f"Abrindo workbook: {excel_path}")
+        wb = excel.Workbooks.Open(excel_path)
+        
+        print("Atualizando dados e gráficos no Excel...")
         wb.RefreshAll()
         excel.CalculateUntilAsyncQueriesDone()
+        
+        # Otimização: Mapeia todos os gráficos do Excel primeiro
+        charts_map = {}
         for ws in wb.Worksheets:
-            for ch in ws.ChartObjects():
-                ch.Chart.Refresh()
+            try:
+                for chart_object in ws.ChartObjects():
+                    charts_map[chart_object.Name] = chart_object
+            except Exception:
+                # Planilha pode não ter ChartObjects, ignora o erro
+                pass
+        print(f"Gráficos encontrados no Excel: {list(charts_map.keys())}")
 
-        for placeholder, chart_name in graficos_info.items():
-            for slide in prs.slides:
-                for shape in list(slide.shapes):
-                    if shape.has_text_frame and placeholder in shape.text_frame.text:
-                        left, top, width, height = shape.left, shape.top, shape.width, shape.height
+        # Itera pelos slides para encontrar e substituir placeholders
+        for slide_idx, slide in enumerate(prs.slides):
+            # Usar list() para criar uma cópia, permitindo remover shapes durante a iteração
+            for shape in list(slide.shapes):
+                if not shape.has_text_frame:
+                    continue
+                
+                # Verifica se o texto do shape corresponde a algum placeholder de gráfico
+                for placeholder, chart_name in graficos_info.items():
+                    if placeholder in shape.text_frame.text:
+                        print(f"-> Placeholder '{placeholder}' encontrado no Slide {slide_idx + 1}.")
                         
-                        sp = shape._sp
-                        sp.getparent().remove(sp)
+                        if chart_name in charts_map:
+                            print(f"--> Gráfico '{chart_name}' correspondente encontrado no Excel.")
+                            
+                            # Exporta o gráfico para um arquivo temporário
+                            chart_object = charts_map[chart_name]
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                                image_path = tmp_file.name
+                            
+                            chart_object.Chart.Export(image_path)
+                            print(f"--> Gráfico exportado para: {image_path}")
 
-                        tmp_img = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                        tmp_img.close()
-                        chart_found = False
-                        for ws in wb.Worksheets:
-                            for ch in ws.ChartObjects():
-                                if ch.Name == chart_name:
-                                    ch.Chart.Export(tmp_img.name)
-                                    chart_found = True
-                                    break
-                            if chart_found:
-                                break
-
-                        if chart_found:
-                            with Image.open(tmp_img.name) as im:
-                                img_width, img_height = im.size
-                                scale_w = width / img_width
-                                scale_h = height / img_height
-                                scale = min(scale_w, scale_h) * 13
-                                new_width = int(img_width * scale)
-                                new_height = int(img_height * scale)
-
-                            left_centered = left + (width - new_width) // 2
-                            top_centered = top + (height - new_height) // 2 + Pt(250)
-
-                            slide.shapes.add_picture(tmp_img.name, left_centered, top_centered, new_width, new_height)
-                            os.remove(tmp_img.name)
+                            # Adiciona a imagem no lugar do placeholder
+                            left, top, width, height = shape.left, shape.top, shape.width, shape.height
+                            slide.shapes.add_picture(image_path, left, top, width=width, height=height)
+                            
+                            # Remove o shape do placeholder
+                            sp = shape._sp
+                            sp.getparent().remove(sp)
+                            print("--> Imagem inserida e placeholder removido.")
+                            
+                            os.remove(image_path)
                         else:
-                            print(f"Atenção: gráfico '{chart_name}' não encontrado no Excel.")
-
-        wb.Close(SaveChanges=False)
-        excel.Quit()
-        pythoncom.CoUninitialize()
+                            print(f"AVISO: O gráfico '{chart_name}' não foi encontrado no arquivo Excel. Verifique o nome.")
+                        # Sai do loop de placeholders, pois este shape já foi processado
+                        break
+                        
     except Exception as e:
-        print(f"Erro ao exportar gráficos do Excel: {e}")
-        try:
+        print(f"ERRO CRÍTICO na função substituir_graficos: {e}")
+        traceback.print_exc()
+    finally:
+        # Garante que o Excel seja fechado corretamente
+        if wb:
+            wb.Close(SaveChanges=False)
+        if excel:
             excel.Quit()
-        except:
-            pass
         pythoncom.CoUninitialize()
+        print("--- Finalizada a substituição de gráficos ---")
 
 
 def adicionar_slides_customizados(prs, custom_slides_json):
@@ -229,45 +248,31 @@ def adicionar_slides_customizados(prs, custom_slides_json):
         custom_slides_data = json.loads(custom_slides_json)
         if not custom_slides_data:
             return
-        
-        # Pega o layout do último slide (nosso slide "molde")
+
         template_slide_layout = prs.slides[-1].slide_layout
 
         for slide_data in custom_slides_data:
-            # Adiciona o novo slide na penúltima posição
-            # O índice para inserção é o tamanho atual da lista de slides - 1
             slide_list = list(prs.slides)
             target_idx = len(slide_list) - 1
             
-            # Adiciona um novo slide usando o layout do molde
             new_slide = prs.slides.add_slide(template_slide_layout)
 
-            # Extrai título e conteúdo
             title_text = slide_data.get('title', '')
             content_text = slide_data.get('content', '')
 
-            # Encontra os placeholders no NOVO slide e substitui
-            # Assumimos que o primeiro placeholder é o título e o segundo é o conteúdo
             if new_slide.shapes.title:
                 new_slide.shapes.title.text = title_text
             
-            # Itera para encontrar o placeholder de conteúdo
             for shape in new_slide.shapes:
                 if shape.is_placeholder and shape.placeholder_format.type == 'BODY':
                     shape.text_frame.text = content_text
-                    break # Para após encontrar o primeiro placeholder de corpo
+                    break
             
-            # Move o slide para a posição correta (penúltima)
-            # Primeiro, precisamos obter o objeto slide_id_list
             sldIdLst = prs.part.package.part_related_by(prs.part.reltype).target_part.element.sldIdLst
             slides = list(sldIdLst)
-            # O slide que acabamos de adicionar está no final da lista
             last_slide_id = slides[-1]
-            # Remove o último slide da lista
             sldIdLst.remove(last_slide_id)
-            # Insere o slide na penúltima posição
             sldIdLst.insert(target_idx, last_slide_id)
-
 
     except Exception as e:
         print(f"Erro ao adicionar slides customizados: {e}")
@@ -277,19 +282,14 @@ def create_ppt(text_substitutions, table_data1, table_data2, campos_ativos, exce
     modelo_path = os.path.join(os.path.dirname(__file__), "templates_ppt", "modeloprincipal3.pptx")
     prs = Presentation(modelo_path)
 
-    # Adiciona slides customizados ANTES de remover os outros
-    # Isso garante que a contagem e os índices estejam corretos
     if custom_slides_json:
         adicionar_slides_customizados(prs, custom_slides_json)
 
     if slides_a_manter:
-        todos_indices = list(range(len(prs.slides)))
-        # Os slides a manter agora devem considerar os slides customizados adicionados
         indices_a_manter = {s - 1 for s in slides_a_manter}
-        indices_para_remover = [i for i in todos_indices if i not in indices_a_manter]
-        for i in sorted(indices_para_remover, reverse=True):
-            # Proteção para não tentar remover um índice que não existe mais
-            if i < len(prs.slides._sldIdLst):
+        # Itera de trás para frente para remover slides sem afetar os índices dos slides restantes
+        for i in range(len(prs.slides) - 1, -1, -1):
+            if i not in indices_a_manter:
                 rId = prs.slides._sldIdLst[i].rId
                 prs.part.drop_rel(rId)
                 del prs.slides._sldIdLst[i]
@@ -524,23 +524,13 @@ def preview_ppt():
         traceback.print_exc()
         return jsonify({"error": f"Erro no preview: {e}"}), 500
     finally:
-        if pptx_temp_file and os.path.exists(pptx_temp_file):
-            try:
-                os.remove(pptx_temp_file)
-            except Exception as e:
-                print(f"Erro ao remover arquivo temporário {pptx_temp_file}: {e}")
-                
-        if pdf_temp_file and os.path.exists(pdf_temp_file):
-            try:
-                os.remove(pdf_temp_file)
-            except Exception as e:
-                print(f"Erro ao remover arquivo temporário {pdf_temp_file}: {e}")
-                
-        if excel_path and os.path.exists(excel_path):
-            try:
-                os.remove(excel_path)
-            except Exception as e:
-                print(f"Erro ao remover arquivo temporário {excel_path}: {e}")
+        # Limpeza robusta de arquivos temporários
+        for temp_file in [pptx_temp_file, pdf_temp_file, excel_path]:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception as e:
+                    print(f"Erro ao remover arquivo temporário {temp_file}: {e}")
 
 # ===================================================================
 # MAIN
